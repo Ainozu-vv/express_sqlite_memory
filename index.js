@@ -39,7 +39,16 @@ function login(req,res){
         res.json({message:`Kötelező megadni a nevet és a jelszót!`})
     }
 }
-function contact(req,res){}
+function contact(req,res){
+    const {name,email,message}=req.body
+
+    if(name&&email&&message){
+        res.json({status:"Message recieved",data:req.body})
+    }
+    else{
+        res.status(400).json({error:"All field are required"})
+    }
+}
 function updateUser(req,res){}
 function deleteUser(req,res){}
 function addData(req,res){}
