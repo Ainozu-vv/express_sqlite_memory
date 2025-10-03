@@ -49,10 +49,45 @@ function contact(req,res){
         res.status(400).json({error:"All field are required"})
     }
 }
-function updateUser(req,res){}
-function deleteUser(req,res){}
-function addData(req,res){}
-function readData(req,res){}
+function updateUser(req,res){
+    // /users/2 ->body új adatok
+    const userId=req.params.id
+    const {name,email}=req.body
+    //elsőnek megkell nézni létezik-e az adott ID-n user
+    if(name&&email){
+        res.json({
+            message:`User updated with id:${userId}`,
+            updateUser:{name,email}
+        })
+    }
+    else{
+        res.status(400).json({error:"Name and email required"})
+    }
+}
+function deleteUser(req,res){
+    const userId=req.params.id
+    res.json({message:`User deleted with id:${userId}`})
+}
+function addData(req,res){
+    const jsonData=JSON.stringify(req.body)
+    db.run(`INSERT INTO data (jsonData) VALUES (?)`,[jsonData],function (err){
+        if (err){
+            return res.status(500).json({error:"Failed to save data"})
+        }
+        res.json({message:"Data saved ", id:this.lastID})
+    })
+
+}
+function readData(req,res){
+    db.all(`SELECT * FROM data`,[],(err,rows)=>{
+        if (err){
+            return res.status(500).json({
+                error:"failed to fetch data"
+            })
+        }
+        res.json({data:rows})
+    })
+}
 
 app.listen(port,()=>{
     console.log(`A szerver elindult a porton: ${port}`)
