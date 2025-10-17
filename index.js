@@ -25,21 +25,21 @@ db.serialize(() => {
     password TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
-    `)
+    `);
 });
 
 //ÚTVONALAK
 app.post("/login", login);
 app.post("/contact", contact);
 
-
 //USER CRUD
-app.post("/users",createUser)
-app.get("/users",listUsers)
+//Create, Read,Update,Delete
+app.post("/users", createUser); //Create
+app.get("/users", listUsers); //Read
+app.get("/users/:id", getUser); //Read /user/1
 
-app.put("/users/:id", updateUser); //users/12
-app.delete("/users/:id", deleteUser); //users/12
-
+app.put("/users/:id", updateUser); //Update /users/12
+app.delete("/users/:id", deleteUser); //Delete /users/12
 
 app.post("/add", addData);
 app.get("/read", readData);
@@ -69,18 +69,54 @@ function updateUser(req, res) {
   const userId = req.params.id;
   const { name, email } = req.body;
   //elsőnek megkell nézni létezik-e az adott ID-n user
-  if (name && email) {
-    res.json({
-      message: `User updated with id:${userId}`,
-      updateUser: { name, email },
-    });
-  } else {
-    res.status(400).json({ error: "Name and email required" });
+  if (!name && !email) {
+    return res.status(400).json({ error: "Kötelező a name és email mező" });
   }
+
+  //1. lépés: meglévő adat lekérése
+  db.get(`SELECT * FROM users WHERE id=?`[userId], (err, existing) => {
+    if (err) {
+      console.err(err);
+      return res.status(500).json({ error: "Hiba a lekérdezés során" });
+    }
+    if (!existing) {
+      return res.status(404).json({ error: "User nem található" });
+    }
+    const newName = name ?? existing.name;
+    const newEmail = email ?? existing.email;
+
+    db.run(
+      `UPDATE user SET name=?,email=? WHERE id=?`,
+      [newName, newEmail, userId],
+      function (err) {
+        if (err) {
+          return res.status(500).json({ error: "Hiba szerver oldalon" });
+        }
+        db.get(
+          `SELECT id,name,email,created_at FROM users WHERE id=?`,
+          [userId],
+          (err, row) => {
+            if (err) {
+              return res.status(500).json({ error: "Hiba szerver oldalon" });
+            }
+            row.json(row);
+          }
+        );
+      }
+    );
+  });
 }
 function deleteUser(req, res) {
   const userId = req.params.id;
-  res.json({ message: `User deleted with id:${userId}` });
+  db.run(`DELETE FROM uses WHERE id=?`, [userId], function (err) {
+    if (err) {
+      return res.status(500).json({ error: "Hiba szerver oldalon" });
+    }
+    if (this.changes == 0) { //volt-e sor változás az adatbázisban??
+      return res.status(404).json({ error: "User nem található" });
+    }
+    res.json({ message: `User deleted with id:${userId}` });
+  });
 }
 function addData(req, res) {
   const jsonData = JSON.stringify(req.body);
@@ -102,35 +138,71 @@ function readData(req, res) {
   });
 }
 
-function createUser(req,res){
-  const {name,email,password}=req.body;
-  if (!name || !email || !password){
-    return res.status(400).json({error:"Name,email és password kötelező mező"})
+function createUser(req, res) {
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) {
+    return res
+      .status(400)
+      .json({ error: "Name,email és password kötelező mező" });
   }
 
   db.run(
-    `INSERT INTO users (name,email,password) VALUES (?,?,?)`,[name,email,password],
-    function (err){
-      if(err){
-        if (err.message && err.message.includes("UNIQUE")){
-          return res.status(409).json({error:"Email már létezik"})
+    `INSERT INTO users (name,email,password) VALUES (?,?,?)`,
+    [name, email, password],
+    function (err) {
+      if (err) {
+        if (err.message && err.message.includes("UNIQUE")) {
+          return res.status(409).json({ error: "Email már létezik" });
         }
-        console.error(err)
-        return res.status(500).json({error:"Nem sikerült felvenni a felhasználót"})
+        console.error(err);
+        return res
+          .status(500)
+          .json({ error: "Nem sikerült felvenni a felhasználót" });
       }
       db.get(
-        `SELECT id,name,email,created_at FROM users WHERE id = ?`,[this.lastID],
-        (err,row)=>{
-          if (err){
-            console.error(err)
-            return res.status(201).json({id:this.lastID})//fallback hogy tényleg létrejött-e
+        `SELECT id,name,email,created_at FROM users WHERE id = ?`,
+        [this.lastID],
+        (err, row) => {
+          if (err) {
+            console.error(err);
+            return res.status(201).json({ id: this.lastID }); //fallback hogy tényleg létrejött-e
           }
-          res.status(201).json(row)
+          res.status(201).json(row);
         }
-      )
+      );
     }
-  )
-
+  );
+}
+function listUsers(req, res) {
+  db.all(
+    `SELECT id,name,created_at FROM users ORDER BY id ASC`,
+    [],
+    (err, rows) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Nem sikerült csatlakozni" });
+      }
+      res.json({ users: rows });
+    }
+  );
+}
+function getUser(req, res) {
+  const userId = req.params.id;
+  console.log(userId);
+  db.get(
+    `SELECT id,name,created_at FROM users WHERE id=?`,
+    [userId],
+    (err, row) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Nem sikerült csatlakozni" });
+      }
+      if (!row) {
+        return res.status(404).json({ error: "Felhasználó nem található" });
+      }
+      res.json({ user: row });
+    }
+  );
 }
 
 app.listen(port, () => {
