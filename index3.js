@@ -92,46 +92,58 @@ function contact(req, res) {
   }
 }
 async function updateUser(req, res) {
-  try {
-    // /users/2 ->body új adatok
-    const userId = req.params.id;
-    const { name, email } = req.body;
-    //elsőnek megkell nézni létezik-e az adott ID-n user
-    if (!name && !email) {
-      return res.status(400).json({ error: "Kötelező a name és email mező" });
-    }
-    const existing = User.findByPk(userId);
-    if (!existing) return res.status(404).json({ error: "User nem található" });
-
-    if (email && email !== existing.email) {
-      const clash = await User.findOne({
-        where: { email, id: { [Op.ne]: userId } },
-      });
-      if (clash) return res.status(409).json({ error: "Email már létezik" });
-    }
-
-    existing.name = name ?? existing.name;
-    existing.email = email ?? existing.email;
-
-    await existing.save();
-
-    const fresh = await User.findByPk(userId, {
-      attributes: ["id", "name", "email", "created_at"],
-    });
-    return res.json(fresh);
-  } catch (error) {
-    return res.status(500).json({ error: "hiba a szerver oldalon" });
+  // /users/2 ->body új adatok
+  const userId = req.params.id;
+  const { name, email } = req.body;
+  //elsőnek megkell nézni létezik-e az adott ID-n user
+  if (!name && !email) {
+    return res.status(400).json({ error: "Kötelező a name és email mező" });
   }
+  User.findByPk(userId).then((existing) => {
+    if (!existing) return res.status(404).json({ error: "User nem található" });
+  });
+
+  const checkEmail =
+    email && email !== existing.email
+      ? User.findOne({ where: { email, id: { [Op.ne]: userId } } }).then(
+          (clash) => {
+            if (clash) {
+              return res.status(409).json({ error: "Email már létezik" });
+            }
+          }
+        )
+      : Promise.resolve(null);
+
+  return checkEmail
+    .then((result) => {
+      if (result && result.error) return result;
+
+      existing.name = name ?? existing.name;
+      existing.email = name ?? existing.email;
+      return existing
+        .save()
+        .then(() => {
+          User.findByPk(userId, {
+            attributes: ["id", "name", "email", "created_at"],
+          });
+        })
+        .then((fresh) => res.json(fresh));
+    })
+    .catch((err) => {
+      return res.status(500).json({ error: "Hiba a szerver oldalon" });
+    });
 }
 async function deleteUser(req, res) {
-  try {
-    const userId = req.params.id;
-    const deleted=await User.destroy({where:{id:userId}});
-    if (deleted==0) return res.status(404).json({error:"User nem található"})
-    return res.json({message:"User sikeresen törölve"})
-  } catch (error) {
-    return res.status(500).json({error:"Hiba a szerver oldalon"})
-  }
+  const userId = req.params.id;
+  User.destroy({ where: { id: userId } })
+    .then((deleted) => {
+      if (deleted == 0)
+        return res.status(404).json({ error: "User nem található" });
+      return res.json({ message: "User sikeresen törölve" });
+    })
+    .catch((err) => {
+      return res.status(500).json({ error: "Hiba a szerver oldalon" });
+    });
 }
 function addData(req, res) {
   const jsonData = JSON.stringify(req.body);
@@ -154,62 +166,62 @@ function readData(req, res) {
 }
 
 async function createUser(req, res) {
-  try {
-    const { name, email, password } = req.body;
-    if (!name || !email || !password) {
-      return res
-        .status(400)
-        .json({ error: "Name,email és password kötelező mező" });
-    }
-    User.create({ name, email, password })
-    .then(user=>User.findByPk(user.id, {
-      attributes: ["id", "name", "email"],
-    }))
-
-    return res.status(201).json(fresh);
-  } catch (err) {
-    if (err?.name == "SequelizeUniqueConstraintError") {
-      return res.status(409).json({ error: "Email már létezik!" });
-    }
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) {
     return res
-      .status(500)
-      .json({ error: "Nem sikerült felvenni a felhasználót." });
+      .status(400)
+      .json({ error: "Name,email és password kötelező mező" });
   }
+  User.create({ name, email, password })
+    .then((user) =>
+      User.findByPk(user.id, {
+        attributes: ["id", "name", "email"],
+      })
+    )
+    .then((fresh) => res.status(201).json(fresh))
+    .catch((err) => {
+      if (err?.name == "SequelizeUniqueConstraintError") {
+        return res.status(409).json({ error: "Email már létezik!" });
+      }
+      return res
+        .status(500)
+        .json({ error: "Nem sikerült felvenni a felhasználót." });
+    });
 }
 async function listUsers(req, res) {
-  try {
-    const users = await User.findAll({
-      attributes: ["id", "name", "created_at"],
-      order: [["id", "ASC"]],
+  User.findAll({
+    attributes: ["id", "name", "created_at"],
+    order: [["id", "ASC"]],
+  })
+    .then((users) => res.json(users))
+    .catch((err) => {
+      res.status(500).json({ error: "Nem sikerült a lekérdezés" });
     });
-    return res.json(users);
-  } catch (err) {
-    return res.status(500).json({ error: "Nem sikerült a lekérdezés" });
-  }
 }
 async function getUser(req, res) {
-  try {
-    const user = await User.findByPk(req.params.id, {
-      attributes: ["id", "name", "created_at"],
-      order: [["id", "ASC"]],
+  User.findByPk(req.params.id, {
+    attributes: ["id", "name", "created_at"],
+    order: [["id", "ASC"]],
+  })
+    .then((existing) => {
+      if (!existing) {
+        return res.status(404).json({ error: "Felhasználó nem létezik" });
+      }
+    })
+    .catch((err) => {
+      return res.status(500).json({ error: "Nem sikerült a lekérdezés" });
     });
-    if (!user)
-      return res.status(404).json({ error: "Felhasználó nem létezik" });
-    return res.json(user);
-  } catch (err) {
-    return res.status(500).json({ error: "Nem sikerült a lekérdezés" });
-  }
 }
 
-(async ()=>{
-try {
+(async () => {
+  try {
     await sequelize.authenticate();
     await sequelize.sync();
-    app.listen(port,()=>{
-        console.log("A szerver elindult")
-    })
-} catch (error) {
-    console.error("Nem sikerült elindítani a szervert:",error);
-    process.exit(1)
-}
-})()
+    app.listen(port, () => {
+      console.log("A szerver elindult");
+    });
+  } catch (error) {
+    console.error("Nem sikerült elindítani a szervert:", error);
+    process.exit(1);
+  }
+})();
