@@ -161,11 +161,10 @@ async function createUser(req, res) {
         .status(400)
         .json({ error: "Name,email és password kötelező mező" });
     }
-    const user = await User.create({ name, email, password });
-
-    const fresh = await User.findByPk(user.id, {
+    User.create({ name, email, password })
+    .then(user=>User.findByPk(user.id, {
       attributes: ["id", "name", "email"],
-    });
+    }))
 
     return res.status(201).json(fresh);
   } catch (err) {
